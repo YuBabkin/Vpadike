@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Стена записей</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            max-width: 600px;
+            margin: 40px auto;
+            padding: 0 16px;
+        }
+        h1 {
+            text-align: center;
+        }
+        .input-area {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 24px;
+        }
+        .input-area input {
+            flex: 1;
+            padding: 10px;
+            font-size: 16px;
+        }
+        .input-area button {
+            padding: 10px 20px;
+            font-size: 16px;
+            cursor: pointer;
+        }
+        .note {
+            border-bottom: 1px solid #ddd;
+            padding: 12px 0;
+        }
+        .note .time {
+            font-size: 12px;
+            color: #888;
+        }
+    </style>
+</head>
+<body>
+    <h1>Оставь свою запись!</h1>
+
+    <div class="input-area">
+        <input type="text" id="noteInput" placeholder="Напишите что-нибудь..." />
+        <button id="sendBtn">Отправить</button>
+    </div>
+
+    <div id="notesContainer"></div>
+
+    <script>
+        const input = document.getElementById("noteInput");
+        const sendBtn = document.getElementById("sendBtn");
+        const container = document.getElementById("notesContainer");
+
+        async function loadNotes() {
+            const res = await fetch("/api/notes");
+            const notes = await res.json();
+            container.innerHTML = notes
+                .map(n => `<div class="note">
+                    <div class="time">${n.created_at}</div>
+                    <div>${escapeHtml(n.text)}</div>
+                </div>`)
+                .join("");
+        }
+
+        function escapeHtml(str) {
+            const div = document.createElement("div");
+            div.textContent = str;
+            return div.innerHTML;
+        }
+
+        sendBtn.addEventListener("click", async () => {
+            const text = input.value.trim();
+            if (!text) return;
+            await fetch("/api/notes", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ text }),
+            });
+            input.value = "";
+            await loadNotes();
+        });
+
+        input.addEventListener("keydown", e => {
+            if (e.key === "Enter") sendBtn.click();
+        });
+
+        loadNotes();
+    </script>
+</body>
+</html>
