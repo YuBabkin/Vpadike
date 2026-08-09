@@ -1,91 +1,238 @@
 <!DOCTYPE html>
-<html lang="ru">
+<html>
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Стена записей</title>
+    <title>Мои заметки</title>
     <style>
+        * { box-sizing: border-box; }
         body {
-            font-family: sans-serif;
-            max-width: 600px;
-            margin: 40px auto;
-            padding: 0 16px;
+            font-family: 'Courier New', Courier, monospace;
+            max-width: 700px;
+            margin: 0 auto;
+            min-height: 100vh;
+            padding: 24px 16px 60px;
+            color: #1c1c1c;
+            background:
+                linear-gradient(180deg,
+                    rgba(0,0,0,0) 0%,
+                    rgba(0,0,0,0) 60%,
+                    rgba(0,0,0,0.28) 60%,
+                    rgba(0,0,0,0.28) 61.5%,
+                    rgba(0,0,0,0) 61.5%),
+                linear-gradient(180deg,
+                    #cfc9ad 0%,
+                    #c4bd9e 60%,
+                    #2f522c 61.5%,
+                    #1d3a1c 100%);
+            background-attachment: fixed;
         }
         h1 {
+            margin: 0 0 24px;
+            padding: 14px;
             text-align: center;
+            text-transform: uppercase;
+            letter-spacing: 4px;
+            font-size: 22px;
+            line-height: 1.4;
+            color: #efe9cc;
+            background: #274a26;
+            border: 3px solid #14260f;
+            outline: 2px solid #4a7444;
+            box-shadow: inset 0 0 0 2px #2d542b, 0 4px 10px rgba(0,0,0,0.4);
+            text-shadow: 1px 1px 0 #0e1d0c;
         }
-        .input-area {
+        h1 .subtitle {
+            display: block;
+            font-size: 12px;
+            font-weight: normal;
+            letter-spacing: 1px;
+            text-transform: none;
+            color: #cfd9b0;
+            text-shadow: none;
+        }
+        #noteForm {
+            background: #f2ebd3;
+            border: 1px solid #b8ab7e;
+            padding: 14px;
+            margin-bottom: 26px;
+            box-shadow: 0 3px 8px rgba(0,0,0,0.3);
+        }
+        #noteForm label {
+            display: inline-block;
+            margin: 4px 10px 4px 0;
+            font-size: 13px;
+        }
+        #noteForm .row {
             display: flex;
-            gap: 8px;
-            margin-bottom: 24px;
+            gap: 6px;
+            margin-bottom: 6px;
         }
-        .input-area input {
-            flex: 1;
-            padding: 10px;
-            font-size: 16px;
+        #noteForm input[type="text"],
+        #noteForm textarea {
+            width: 100%;
+            margin-bottom: 6px;
+            padding: 7px 8px;
+            font-family: inherit;
+            font-size: 14px;
+            color: #2b2b2b;
+            background: #fdf8e7;
+            border: 2px solid #6d7d5f;
+            border-radius: 0;
         }
-        .input-area button {
-            padding: 10px 20px;
-            font-size: 16px;
+        #noteForm .row input[type="text"] { margin-bottom: 0; flex: 1; }
+        #noteForm input[type="color"] { width: 40px; height: 26px; border: 2px solid #6d7d5f; background: #fdf8e7; vertical-align: middle; }
+        #noteForm input[type="number"] { width: 60px; padding: 4px; font-family: inherit; border: 2px solid #6d7d5f; background: #fdf8e7; }
+        #noteForm button[type="submit"] {
+            display: block;
+            width: 100%;
+            margin-top: 8px;
+            padding: 8px;
+            font-family: inherit;
+            font-weight: bold;
+            font-size: 15px;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            color: #efe9cc;
+            background: #2f522c;
+            border: 2px solid #14260f;
+            box-shadow: inset 0 0 0 2px #4a7444;
             cursor: pointer;
         }
+        #noteForm button[type="submit"]:hover { background: #3a6836; }
         .note {
-            border-bottom: 1px solid #ddd;
-            padding: 12px 0;
+            position: relative;
+            background: #f1ead2;
+            border: 1px solid #c6bb95;
+            padding: 16px 14px 10px;
+            margin: 24px 10px 18px;
+            box-shadow: 2px 3px 9px rgba(0,0,0,0.35);
         }
-        .note .time {
+        .note::before {
+            content: '';
+            position: absolute;
+            top: -9px;
+            left: 50%;
+            width: 96px;
+            height: 20px;
+            transform: translateX(-50%) rotate(-1.5deg);
+            background: rgba(211, 200, 156, 0.9);
+            border-left: 1px dashed rgba(120,108,64,0.5);
+            border-right: 1px dashed rgba(120,108,64,0.5);
+        }
+        .note:nth-child(even)::before { transform: translateX(-50%) rotate(2deg); }
+        .note:nth-child(odd) { transform: rotate(0.25deg); }
+        .note:nth-child(3n) { transform: rotate(-0.4deg); }
+        .note-head {
+            display: flex;
+            align-items: baseline;
+            justify-content: space-between;
+            gap: 8px;
+            margin-bottom: 8px;
+        }
+        .note h3 {
+            margin: 0;
+            font-family: Georgia, 'Times New Roman', serif;
+            font-size: 19px;
+            color: #2f2410;
+            text-decoration: underline;
+            text-decoration-color: rgba(120,108,64,0.5);
+            overflow-wrap: anywhere;
+        }
+        .author { font-style: italic; font-size: 12px; color: #5c4f30; white-space: nowrap; }
+        .author::before { content: '✍ '; }
+        .delete-btn {
+            font-family: inherit;
             font-size: 12px;
-            color: #888;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+            color: #8a2222;
+            background: transparent;
+            border: 2px solid #8a2222;
+            padding: 3px 10px;
+            cursor: pointer;
+            box-shadow: inset 0 0 0 1px #f1ead2;
+        }
+        .delete-btn:hover { background: #8a2222; color: #f1ead2; }
+        footer {
+            text-align: center;
+            color: #efe9cc;
+            font-size: 12px;
+            letter-spacing: 1px;
+            margin-top: 30px;
+            opacity: 0.85;
         }
     </style>
 </head>
 <body>
-    <h1>Оставь свою запись!</h1>
+        <h1>Доска объявлений
+            <span class="subtitle">3-й подъезд · пр-т Славы Комсомола, д. 5</span>
+            <span class="subtitle">ЖЭК № 3 «Уют» · дежурная: тётя Зина</span>
+        </h1>
+    <form id="noteForm">
+        <div class="row">
+            <input type="text" id="titleInput" placeholder="Заголовок" required>
+            <input type="text" id="authorInput" placeholder="Автор">
+        </div>
+        <textarea id="contentInput" placeholder="Текст" required></textarea>
+        <label>Цвет текста: <input type="color" id="colorInput" value="#000000"></label>
+        <label>Размер шрифта: <input type="number" id="sizeInput" value="16" min="8" max="48"></label>
+        <button type="submit">Добавить</button>
+    </form>
+    <div id="notesList"></div>
 
-    <div class="input-area">
-        <input type="text" id="noteInput" placeholder="Напишите что-нибудь..." />
-        <button id="sendBtn">Отправить</button>
-    </div>
-
-    <div id="notesContainer"></div>
+    <footer>Смотрите под ноги, не мусорите и не поджигайте лифт</footer>
 
     <script>
-        const input = document.getElementById("noteInput");
-        const sendBtn = document.getElementById("sendBtn");
-        const container = document.getElementById("notesContainer");
+        // Форматируем время публикации в формат ДД.ММ.ГГГГ ЧЧ:ММ
+        function formatDate(iso) {
+            if (!iso) return '';
+            const d = new Date(iso);
+            return `${String(d.getDate()).padStart(2, '0')}.${String(d.getMonth() + 1).padStart(2, '0')}.${d.getFullYear()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+        }
 
+        // Загружаем заметки при загрузке страницы
         async function loadNotes() {
-            const res = await fetch("/api/notes");
+            const res = await fetch('/notes');
             const notes = await res.json();
-            container.innerHTML = notes
-                .map(n => `<div class="note">
-                    <div class="time">${n.created_at}</div>
-                    <div>${escapeHtml(n.text)}</div>
-                </div>`)
-                .join("");
-        }
-
-        function escapeHtml(str) {
-            const div = document.createElement("div");
-            div.textContent = str;
-            return div.innerHTML;
-        }
-
-        sendBtn.addEventListener("click", async () => {
-            const text = input.value.trim();
-            if (!text) return;
-            await fetch("/api/notes", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ text }),
+            const container = document.getElementById('notesList');
+            container.innerHTML = notes.map(n => `
+                <div class="note">
+                    <div class="note-head">
+                        <h3>${n.title}</h3>
+                        <span class="author">${n.author || 'Аноним'} · ${formatDate(n.created_at)}</span>
+                    </div>
+                    <p style="color:${n.font_color}; font-size:${n.font_size}px">${n.content}</p>
+                    <button class="delete-btn" data-id="${n.id}">Удалить</button>
+                </div>
+            `).join('');
+            // Вешаем обработчики на кнопки удаления
+            document.querySelectorAll('.delete-btn').forEach(btn => {
+                btn.onclick = async () => {
+                    const id = btn.dataset.id;
+                    await fetch(`/notes/${id}`, { method: 'DELETE' });
+                    loadNotes(); // обновляем список
+                };
             });
-            input.value = "";
-            await loadNotes();
-        });
+        }
 
-        input.addEventListener("keydown", e => {
-            if (e.key === "Enter") sendBtn.click();
-        });
+        // Обработчик отправки формы
+        document.getElementById('noteForm').onsubmit = async (e) => {
+            e.preventDefault();
+            const title = document.getElementById('titleInput').value;
+            const content = document.getElementById('contentInput').value;
+            const author = document.getElementById('authorInput').value;
+            const font_color = document.getElementById('colorInput').value;
+            const font_size = parseInt(document.getElementById('sizeInput').value, 10);
+            await fetch('/notes', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ title, content, author, font_color, font_size })
+            });
+            document.getElementById('titleInput').value = '';
+            document.getElementById('contentInput').value = '';
+            document.getElementById('authorInput').value = '';
+            loadNotes();
+        };
 
         loadNotes();
     </script>
