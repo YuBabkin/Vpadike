@@ -17,14 +17,28 @@ python3 -c "from app import app; print('OK', app)"
 
 ## Шаг 1. Загрузить код в Git-репозиторий
 
-1. Создайте приватный репозиторий на GitHub или GitLab, например `doska-obyavleniy`.
-2. В папке проекта:
+Репозиторий уже создан на GitHub: **https://github.com/YuBabkin/Vpadike.git** (ветка `main`).
+
+1. Убедитесь, что remote `origin` указывает на этот репозиторий:
+
+```bash
+git remote -v
+# origin  https://github.com/YuBabkin/Vpadike.git (fetch)
+# origin  https://github.com/YuBabkin/Vpadike.git (push)
+```
+
+2. Если ссылка другая — замените:
+
+```bash
+git remote set-url origin https://github.com/YuBabkin/Vpadike.git
+```
+
+3. Закоммитьте изменения и отправьте в `main`:
 
 ```bash
 git add .
 git commit -m "Подготовка к деплою на Majordomo: requirements, пути"
 git branch -M main
-git remote add origin https://github.com/ВАШ_ЛОГИН/doska-obyavleniy.git
 git push -u origin main
 ```
 
@@ -46,7 +60,7 @@ git push -u origin main
 ## Шаг 4. Подключить Git-репозиторий
 
 1. Вкладка **«Приложение»** в настройках сайта.
-2. Ссылка на репозиторий: `https://github.com/ВАШ_ЛОГИН/doska-obyavleniy.git`.
+2. Ссылка на репозиторий: `https://github.com/YuBabkin/Vpadike.git`.
 3. Ветка: `main`.
 4. Для приватного репозитория — логин и Personal Access Token (GitHub: Profile → Settings → Developer settings → Tokens).
 5. **«Загрузить приложение»** — клонирует код в корень сайта.
