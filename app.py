@@ -50,10 +50,39 @@ app = Flask(__name__)
 # а не в текущей рабочей директории (рабочая директория может меняться).
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
+# Путь к файлу лога ошибок: лежит в корневой папке приложения (error.log),
+# рядом с app.py, чтобы его легко было найти через FTP с сервера.
+ERROR_LOG_PATH = os.path.join(BASE_DIR, 'error.log')
+
+
+def log_error_message(msg):
+    """
+    Пишет сообщение/трейсбек в файл error.log (режим дополнения).
+
+    Это отдельная функция, чтобы лог можно было писать даже тогда,
+    когда приложение падает на этапе импорта — до регистрации
+    Flask-обработчика ошибок (@app.errorhandler ниже).
+    """
+    try:
+        with open(ERROR_LOG_PATH, 'a', encoding='utf-8') as f:
+            f.write('\n' + '=' * 60 + '\n')          # разделитель
+            f.write(datetime.utcnow().isoformat() + '\n')  # дата и время
+            f.write(str(msg) + '\n')                 # текст сообщения
+    except Exception:
+        # Если записать лог не удалось (например, нет прав) — не падаем сами
+        pass
+
+
 # Создаём папку instance (Flask кладёт туда файлы, специфичные для приложения),
 # если она ещё не существует. SQLAlchemy сам создаст файл БД,
 # но если папки нет — создаст и её, поэтому делаем это явно заранее.
-os.makedirs(os.path.join(BASE_DIR, 'instance'), exist_ok=True)
+# Если создание не удалось (например, нет прав на запись) — логируем
+# и прерываем запуск, чтобы ошибка не была «молчаливой».
+try:
+    os.makedirs(os.path.join(BASE_DIR, 'instance'), exist_ok=True)
+except Exception:
+    log_error_message('Ошибка создания папки instance:\n' + traceback.format_exc())
+    raise
 
 # URI подключения к базе данных: SQLite-файл notes.db в папке instance.
 # sqlite:/// — протокол SQLite для файловой БД, далее идёт абсолютный путь.
@@ -71,11 +100,6 @@ db = SQLAlchemy(app)
 # ---------------------------------------------------------------------------
 # ЛОГИРОВАНИЕ ОШИБОК В ФАЙЛ
 # ---------------------------------------------------------------------------
-
-# Путь к файлу лога ошибок: лежит в корневой папке приложения (error.log),
-# рядом с app.py, чтобы его легко было найти через FTP с сервера.
-ERROR_LOG_PATH = os.path.join(BASE_DIR, 'error.log')
-
 
 @app.errorhandler(Exception)
 def log_unhandled_exception(error):
@@ -95,19 +119,8 @@ def log_unhandled_exception(error):
 
     Возвращает: ответ с ошибкой 500.
     """
-    try:
-        # Формируем текст трейсбека
-        tb = traceback.format_exc()
-        # Открываем файл лога в режиме добавления (append), в кодировке UTF-8
-        with open(ERROR_LOG_PATH, 'a', encoding='utf-8') as f:
-            # Пишем разделитель с датой и временем ошибки
-            f.write('\n' + '=' * 60 + '\n')
-            f.write(datetime.utcnow().isoformat() + '\n')
-            # Пишем сам трейсбек
-            f.write(tb + '\n')
-    except Exception:
-        # Если записать лог не удалось (например, нет прав) — не падаем сами
-        pass
+    # Записываем полный трейсбек через вспомогательную функцию
+    log_error_message(traceback.format_exc())
 
     # Возвращаем стандартную ошибку 500, чтобы пользователь ничего не заметил
     return 'Внутренняя ошибка сервера', 500
@@ -297,38 +310,46 @@ NEW_COLUMNS = [
 
 # Всё выполняется внутри app_context: иначе Flask/SQLAlchemy не знают,
 # в каком приложении работаем (нужно для create_all и запросов).
-with app.app_context():
-    # Создаём все таблицы, которые описаны моделями (если их ещё нет).
-    db.create_all()
+# Если инициализация БД падает — записываем трейсбек в error.log
+# (это происходит на этапе импорта, когда @app.errorhandler ещё не
+# зарегистрирован, поэтому используем вспомогательную функцию) и
+# прерываем запуск.
+try:
+    with app.app_context():
+        # Создаём все таблицы, которые описаны моделями (если их ещё нет).
+        db.create_all()
 
-    # Импортируем text для выполнения «сырого» SQL-запроса.
-    from sqlalchemy import text
+        # Импортируем text для выполнения «сырого» SQL-запроса.
+        from sqlalchemy import text
 
-    # PRAGMA table_info(note) возвращает метаданные таблицы note.
-    # Извлекаем список существующих имён колонок (вторая позиция каждого ряда).
-    cols = [row[1] for row in db.session.execute(text("PRAGMA table_info(note)")).fetchall()]
+        # PRAGMA table_info(note) возвращает метаданные таблицы note.
+        # Извлекаем список существующих имён колонок (вторая позиция каждого ряда).
+        cols = [row[1] for row in db.session.execute(text("PRAGMA table_info(note)")).fetchall()]
 
-    added = []  # сюда запомним, какие колонки только что добавили
+        added = []  # сюда запомним, какие колонки только что добавили
 
-    # Для каждой колонки из списка NEW_COLUMNS:
-    # если её ещё нет в таблице — добавляем через ALTER TABLE.
-    for col, ctype in NEW_COLUMNS:
-        if col not in cols:
-            db.session.execute(text(f"ALTER TABLE note ADD COLUMN {col} {ctype}"))
-            added.append(col)
+        # Для каждой колонки из списка NEW_COLUMNS:
+        # если её ещё нет в таблице — добавляем через ALTER TABLE.
+        for col, ctype in NEW_COLUMNS:
+            if col not in cols:
+                db.session.execute(text(f"ALTER TABLE note ADD COLUMN {col} {ctype}"))
+                added.append(col)
 
-    # Если колонку created_at добавили только сейчас — заполняем у всех
-    # существующих записей текущим временем (иначе там был бы NULL).
-    if 'created_at' in added:
-        Note.query.update({Note.created_at: datetime.utcnow()})
+        # Если колонку created_at добавили только сейчас — заполняем у всех
+        # существующих записей текущим временем (иначе там был бы NULL).
+        if 'created_at' in added:
+            Note.query.update({Note.created_at: datetime.utcnow()})
 
-    # Если колонки author/font_color/font_size появились только что —
-    # проставляем старым записям значения по умолчанию.
-    if 'author' in added:
-        Note.query.update({Note.author: 'Аноним', Note.font_color: '#000000', Note.font_size: 16})
+        # Если колонки author/font_color/font_size появились только что —
+        # проставляем старым записям значения по умолчанию.
+        if 'author' in added:
+            Note.query.update({Note.author: 'Аноним', Note.font_color: '#000000', Note.font_size: 16})
 
-    # Фиксируем все изменения в базе (коммит транзакции).
-    db.session.commit()
+        # Фиксируем все изменения в базе (коммит транзакции).
+        db.session.commit()
+except Exception:
+    log_error_message('Ошибка инициализации базы данных:\n' + traceback.format_exc())
+    raise
 
 
 # ---------------------------------------------------------------------------
