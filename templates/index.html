@@ -575,8 +575,6 @@
                     <p style="color:${n.font_color}; font-size:${n.font_size}px">${n.content}</p>
                     <!-- Кнопка удаления; data-id хранит id заметки для DELETE-запроса -->
                     <button class="delete-btn" data-id="${n.id}">Удалить</button>
-                    <!-- Мета-данные (IP, гео, браузер и т.п.) -->
-                    <div class="note-meta">${buildMeta(n)}</div>
                 </div>
             `).join(''); // join('') склеивает все карточки в одну строку без разделителей
 
