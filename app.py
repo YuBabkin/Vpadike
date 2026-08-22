@@ -29,11 +29,16 @@ import requests    # HTTP-клиент для внешних запросов (�
 # Flask — класс приложения, request — объект входящего HTTP-запроса,
 # jsonify — сериализация ответа в JSON.
 from flask import render_template
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, session
 
 # SQLAlchemy — ORM (Object-Relational Mapping): позволяет работать
 # с таблицами базы данных как с Python-объектами.
 from flask_sqlalchemy import SQLAlchemy
+
+# werkzeug.security — утилиты для безопасного хранения паролей.
+# generate_password_hash хэширует пароль (с солью), check_password_hash
+# сверяет введённый пароль с хэшем. Открытым текстом пароли не храним.
+from werkzeug.security import generate_password_hash, check_password_hash
 
 
 # ---------------------------------------------------------------------------
@@ -92,6 +97,12 @@ app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///' + os.path.join(BASE_DIR, 'i
 # расходы; эта функция почти никому не нужна в реальных проектах).
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
+# SECRET_KEY нужен Flask для подписи сессионных cookie (в них хранится
+# id залогиненного пользователя). Берём из переменной окружения, а если
+# её нет — используем fallback-значение (только для локальной разработки).
+# На проде ОБЯЗАТЕЛЬНО задайте сложный SECRET_KEY через переменную среды.
+app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev-secret-change-me')
+
 # Создаём объект db — мост между Flask-приложением и SQLAlchemy.
 # Через него объявляются модели и выполняются запросы к БД.
 db = SQLAlchemy(app)
@@ -143,11 +154,133 @@ def index():
 
 
 # ---------------------------------------------------------------------------
+# АВТОРИЗАЦИЯ ПОЛЬЗОВАТЕЛЕЙ (регистрация, вход, выход, статус)
+# ---------------------------------------------------------------------------
+
+from functools import wraps  # для декоратора login_required
+
+
+def login_required(f):
+    """
+    Декоратор: пропускает запрос только если пользователь залогинен.
+
+    Залогиненность определяем по наличию 'user_id' в сессии
+    (подписанная cookie Flask). Если пользователь не авторизован —
+    возвращаем JSON с ошибкой и кодом 401 (Unauthorized).
+    """
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        if 'user_id' not in session:
+            return jsonify({'error': 'Требуется авторизация'}), 401
+        return f(*args, **kwargs)
+    return decorated
+
+
+def get_current_user():
+    """Возвращает ORM-объект текущего пользователя или None."""
+    if 'user_id' not in session:
+        return None
+    return User.query.get(session['user_id'])
+
+
+@app.route('/register', methods=['POST'])
+def register():
+    """
+    Регистрация нового пользователя.
+
+    Ожидает JSON: {"username": "...", "password": "..."}.
+    Если логин занят — возвращает ошибку 400. Иначе создаёт
+    пользователя (пароль сохраняется в виде хэша) и сразу логинит.
+    """
+    data = request.get_json()
+    username = (data.get('username') or '').strip()
+    password = data.get('password') or ''
+
+    # Простая валидация входных данных.
+    if not username or not password:
+        return jsonify({'error': 'Укажите логин и пароль'}), 400
+    if len(username) < 3:
+        return jsonify({'error': 'Логин не короче 3 символов'}), 400
+    if len(password) < 6:
+        return jsonify({'error': 'Пароль не короче 6 символов'}), 400
+
+    # Проверяем, что такого логина ещё нет (username — уникальный).
+    if User.query.filter_by(username=username).first():
+        return jsonify({'error': 'Логин уже занят'}), 400
+
+    # Создаём пользователя. Пароль хэшируем — в БД попадёт только хэш.
+    user = User(username=username, password_hash=generate_password_hash(password))
+    db.session.add(user)
+    db.session.commit()
+
+    # Сразу «логиним» нового пользователя (кладём id в сессию).
+    session['user_id'] = user.id
+    return jsonify({'username': user.username}), 201
+
+
+@app.route('/login', methods=['POST'])
+def login():
+    """
+    Вход пользователя.
+
+    Ожидает JSON: {"username": "...", "password": "..."}.
+    Сверяет пароль с хэшем. При успехе кладёт user_id в сессию.
+    """
+    data = request.get_json()
+    username = (data.get('username') or '').strip()
+    password = data.get('password') or ''
+
+    # Ищем пользователя по логину.
+    user = User.query.filter_by(username=username).first()
+    # check_password_hash сверяет введённый пароль с хэшем из БД.
+    if not user or not check_password_hash(user.password_hash, password):
+        return jsonify({'error': 'Неверный логин или пароль'}), 401
+
+    # Успешный вход: сохраняем id в подписанной сессии.
+    session['user_id'] = user.id
+    return jsonify({'username': user.username})
+
+
+@app.route('/logout', methods=['POST'])
+def logout():
+    """Выход пользователя: очищаем сессию."""
+    session.clear()
+    return jsonify({'ok': True})
+
+
+@app.route('/me', methods=['GET'])
+def me():
+    """
+    Возвращает статус авторизации для клиента.
+
+    Полезно, чтобы фронтенд понимал: показывать форму добавления
+    и кнопки удаления или форму входа.
+    """
+    user = get_current_user()
+    if user:
+        return jsonify({'authenticated': True, 'username': user.username})
+    return jsonify({'authenticated': False})
+
+
+# ---------------------------------------------------------------------------
 # МОДЕЛЬ ЗАМЕТКИ (ORM-класс таблицы note)
 # ---------------------------------------------------------------------------
 
 # Каждый атрибут класса = колонка таблицы в базе данных.
 # db.Column(тип, параметры) описывает столбец.
+class User(db.Model):
+    """
+    Модель пользователя (авторизация).
+
+    Пароль хранится ТОЛЬКО в виде хэша (generate_password_hash),
+    сам пароль в базу не попадает.
+    """
+
+    id = db.Column(db.Integer, primary_key=True)                 # уникальный id пользователя
+    username = db.Column(db.String(80), unique=True, nullable=False)  # логин (уникальный)
+    password_hash = db.Column(db.String(255), nullable=False)    # хэш пароля (с солью)
+
+
 class Note(db.Model):
     """
     Модель заметки на «доске объявлений».
@@ -160,6 +293,7 @@ class Note(db.Model):
     # --- Основные (пользовательские) поля заметки ---
 
     id = db.Column(db.Integer, primary_key=True)        # уникальный числовой id (автоинкремент)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)  # кто оставил заметку (null — старые/анонимные)
     title = db.Column(db.String(100), nullable=False)   # заголовок заметки (не может быть пустым)
     content = db.Column(db.Text, nullable=False)        # текст заметки (Text — длинный текст)
     author = db.Column(db.String(100), default='Аноним')  # автор; по умолчанию «Аноним»
@@ -228,6 +362,7 @@ class Note(db.Model):
         """
         return {
             'id': self.id,
+            'user_id': self.user_id,
             'title': self.title,
             'content': self.content,
             'author': self.author,
@@ -275,6 +410,7 @@ class Note(db.Model):
 # автоматически добавить недостающие столбцы в уже существующую таблицу.
 NEW_COLUMNS = [
     ('created_at', 'DATETIME'),                       # дата публикации
+    ('user_id', 'INTEGER'),                            # автор заметки (id пользователя)
     ('author', "VARCHAR(100) DEFAULT 'Аноним'"),      # автор со значением по умолчанию
     ('font_color', "VARCHAR(20) DEFAULT '#000000'"),  # цвет текста
     ('font_size', 'INTEGER DEFAULT 16'),              # размер шрифта
@@ -583,6 +719,7 @@ def get_notes():
 
 # Тот же маршрут /notes, но для HTTP-метода POST (создание).
 @app.route('/notes', methods=['POST'])
+@login_required  # только авторизованные пользователи могут оставлять заметки
 def create_note():
     """
     Создаёт новую заметку из данных, присланных клиентом в JSON.
@@ -595,6 +732,9 @@ def create_note():
     """
     # Разбираем JSON-тело запроса в Python-словарь.
     data = request.get_json()
+
+    # Текущий пользователь (гарантирован декоратором login_required).
+    current_user = get_current_user()
 
     # IP и порт клиента берутся из самого HTTP-запроса.
     ip = request.remote_addr                     # IP-адрес клиента
@@ -610,9 +750,11 @@ def create_note():
     # Создаём новый объект Note с заполнением всех колонок.
     new_note = Note(
         # --- Пользовательские данные из формы ---
+        user_id=current_user.id,                              # кто оставил заметку
         title=data['title'],                                  # заголовок (обязательное поле, без .get)
         content=data['content'],                              # текст заметки
-        author=data.get('author') or 'Аноним',                # автор или «Аноним» по умолчанию
+        # Автор: если пользователь ввёл — берём его, иначе логин пользователя.
+        author=data.get('author') or current_user.username,   # автор заметки
         font_color=data.get('font_color') or '#000000',       # цвет текста
         font_size=data.get('font_size') or 16,                # размер шрифта
 
@@ -676,6 +818,7 @@ def create_note():
 # Маршрут с параметром <int:id> в URL; int — конвертер Flask,
 # который автоматически преобразует строку в целое число.
 @app.route('/notes/<int:id>', methods=['DELETE'])
+@login_required  # удалять могут только авторизованные пользователи
 def delete_note(id):
     """
     Удаляет заметку по её id.

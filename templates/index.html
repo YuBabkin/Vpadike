@@ -4,8 +4,8 @@
   ЯЗЫК: HTML (HyperText Markup Language) — основа документа.
   Весь этот файл — это один HTML-документ. Внутри него вложены ещё
   два языка:
-    • CSS  — в блоке <style> (стили оформления)
-    • JS   — в блоке <script> (логика на стороне браузера)
+    • CSS  — в блоке каскадных таблиц стилей (оформление)
+    • JS   — в блоке сценариев (логика на стороне браузера)
   Ниже по тексту есть пометки "=== ЯЗЫК: CSS ===" и "=== ЯЗЫК: JS ===",
   показывающие, где начинается и заканчивается каждый язык.
   =====================================================================
@@ -31,7 +31,7 @@
         /* =================================================================
            ЯЗЫК: CSS (Cascading Style Sheets) — начало блока стилей.
            Здесь описывается внешний вид всех элементов страницы.
-           (Конец CSS — перед закрывающим </style> и тегом <body>.)
+           (Конец CSS — перед закрывающим тегом стилей и тегом body.)
            ================================================================= */
 
         /*
@@ -369,6 +369,86 @@
             margin-top: 30px;     /* отступ сверху */
             opacity: 0.85;        /* лёгкая полупрозрачность */
         }
+
+        /*
+          ============================================================
+          ПАНЕЛЬ АВТОРИЗАЦИИ (#authBar)
+          ============================================================
+        */
+
+        /* Блок авторизации оформлен как «бумажный бланк», как и форма заметки */
+        #authBar {
+            background: #f2ebd3;            /* светло-бежевый фон */
+            border: 1px solid #b8ab7e;      /* тонкая коричневатая рамка */
+            padding: 12px 14px;             /* внутренние отступы */
+            margin-bottom: 22px;            /* отступ до формы/списка */
+            box-shadow: 0 3px 8px rgba(0,0,0,0.3); /* тень */
+            font-size: 14px;                /* размер текста */
+        }
+
+        /* Строка с полями входа/регистрации — flex, чтобы поля были в ряд */
+        #authBar .auth-row {
+            display: flex;      /* flexbox-раскладка */
+            gap: 6px;           /* расстояние между элементами */
+            flex-wrap: wrap;    /* перенос на новую строку при нехватке места */
+            align-items: center; /* выравнивание по центру */
+        }
+
+        /* Поля логина и пароля в панели авторизации */
+        #authBar input[type="text"],
+        #authBar input[type="password"] {
+            flex: 1;                /* делят доступное пространство */
+            min-width: 120px;       /* минимальная ширина */
+            padding: 7px 8px;       /* внутренние отступы */
+            font-family: inherit;   /* наследуем шрифт */
+            font-size: 14px;
+            color: #2b2b2b;
+            background: #fdf8e7;    /* светлый фон */
+            border: 2px solid #6d7d5f; /* зелёная рамка */
+        }
+
+        /* Кнопки «Войти» / «Регистрация» / «Выйти» */
+        #authBar button {
+            padding: 7px 14px;      /* внутренние отступы */
+            font-family: inherit;
+            font-weight: bold;
+            font-size: 13px;
+            letter-spacing: 1px;
+            text-transform: uppercase; /* заглавные буквы */
+            color: #efe9cc;         /* светлый текст */
+            background: #2f522c;    /* зелёный фон */
+            border: 2px solid #14260f;
+            box-shadow: inset 0 0 0 2px #4a7444;
+            cursor: pointer;
+        }
+        #authBar button:hover { background: #3a6836; }
+
+        /* Ссылка-переключатель «Регистрация» <-> «Уже есть аккаунт?» */
+        #authBar .auth-toggle {
+            background: none;       /* без фона */
+            border: none;           /* без рамки */
+            box-shadow: none;
+            color: #2f522c;         /* зелёный текст */
+            text-decoration: underline; /* подчёркнутая */
+            text-transform: none;   /* обычный регистр */
+            font-weight: normal;
+            cursor: pointer;
+            padding: 0 0 0 4px;
+        }
+        #authBar .auth-toggle:hover { background: none; color: #3a6836; }
+
+        /* Текст приветствия для вошедшего пользователя */
+        #authBar .auth-status {
+            font-weight: bold;
+            color: #2f2410;
+        }
+
+        /* Сообщение об ошибке (неверный логин и т.п.) */
+        #authBar .auth-error {
+            color: #9a2b2b;         /* красноватый цвет */
+            font-size: 12px;
+            margin-top: 6px;
+        }
     </style>
     <!-- ===================== КОНЕЦ ЯЗЫКА CSS ===================== -->
 </head>
@@ -384,10 +464,20 @@
     </h1>
 
     <!--
+      ПАНЕЛЬ АВТОРИЗАЦИИ.
+      Когда пользователь НЕ вошёл — здесь показываются формы
+      входа и регистрации. Когда вошёл — его имя и кнопка «Выйти».
+      Содержимое заполняется JavaScript'ом (функция renderAuthBar).
+    -->
+    <div id="authBar"></div>
+
+    <!--
       Форма добавления новой заметки. Обрабатывается в JavaScript
       через обработчик onsubmit (см. скрипт внизу). Сама страница
       при отправке НЕ перезагружается (e.preventDefault()).
+      Видна только авторизованным пользователям (переключается в JS).
     -->
+    <div id="editor" style="display:none">
     <form id="noteForm">
         <!-- Ряд из двух полей: заголовок (обязательное) и автор (необязательное) -->
         <div class="row">
@@ -405,6 +495,8 @@
         <!-- Кнопка отправки формы -->
         <button type="submit">Добавить</button>
     </form>
+    </div>
+    <!-- /editor -->
 
     <!--
       Контейнер для списка заметок.
@@ -421,7 +513,7 @@
            ЯЗЫК: JavaScript (JS) — начало блока логики браузера.
            Здесь описывается поведение страницы: запросы к серверу,
            сбор данных об устройстве посетителя, отрисовка карточек.
-           (Конец JS — перед закрывающим </script>.)
+           (Конец JS — перед закрывающим тегом сценария.)
            ================================================================= */
 
         /*
@@ -566,6 +658,150 @@
 
         /*
           ============================================================
+          АВТОРИЗАЦИЯ (вход, регистрация, выход, статус)
+          ============================================================
+        */
+
+        // Глобальное состояние авторизации. Обновляется функцией checkAuth().
+        // Используется, чтобы показывать/прятать форму заметки и кнопки удаления.
+        const authState = { authenticated: false, username: null };
+
+        /**
+         * Сохраняет сообщение об ошибке авторизации в панель (#authError).
+         * @param {string} msg — текст ошибки (или пусто, чтобы убрать)
+         */
+        function showAuthError(msg) {
+            const el = document.getElementById('authError');
+            if (el) el.textContent = msg || '';
+        }
+
+        /**
+         * Запрашивает у сервера статус авторизации (GET /me), сохраняет
+         * его в authState, рисует панель и переключает видимость формы.
+         * После этого перезагружает список заметок (кнопки удаления
+         * зависят от того, вошёл ли пользователь).
+         */
+        async function checkAuth() {
+            try {
+                const res = await fetch('/me');
+                const data = await res.json();
+                authState.authenticated = !!data.authenticated;
+                authState.username = data.username || null;
+            } catch (e) {
+                authState.authenticated = false;
+            }
+            renderAuthBar();          // перерисовываем панель под новый статус
+            await loadNotes();        // обновляем карточки (видны ли кнопки «Удалить»)
+        }
+
+        /**
+         * Рисует содержимое панели #authBar в зависимости от authState:
+         *  • не авторизован — формы входа/регистрации (с переключателем);
+         *  • авторизован — приветствие с именем и кнопка «Выйти».
+         */
+        function renderAuthBar() {
+            const bar = document.getElementById('authBar');
+            const editor = document.getElementById('editor');
+
+            if (authState.authenticated) {
+                // --- Вошёл: приветствие + выход ---
+                bar.innerHTML = `
+                    <span class="auth-status">Вы вошли как <b>${authState.username}</b></span>
+                    <button id="logoutBtn">Выйти</button>
+                `;
+                editor.style.display = 'block'; // показываем форму добавления
+                document.getElementById('logoutBtn').onclick = async () => {
+                    await fetch('/logout', { method: 'POST' });
+                    authState.authenticated = false;
+                    authState.username = null;
+                    showAuthError('');
+                    await checkAuth();
+                };
+            } else {
+                // --- Не вошёл: показываем форму входа (режим по умолчанию) ---
+                editor.style.display = 'none'; // прячем форму добавления
+                renderLoginForm(bar);
+            }
+        }
+
+        /**
+         * Рисует форму ВХОДА в панели авторизации и навешивает обработчики.
+         * @param {HTMLElement} bar — контейнер #authBar
+         */
+        function renderLoginForm(bar) {
+            bar.innerHTML = `
+                <div class="auth-row">
+                    <input type="text" id="loginUser" placeholder="Логин" autocomplete="username">
+                    <input type="password" id="loginPass" placeholder="Пароль" autocomplete="current-password">
+                    <button id="loginBtn">Войти</button>
+                    <button class="auth-toggle" id="toRegister">Регистрация</button>
+                </div>
+                <div class="auth-error" id="authError"></div>
+            `;
+            // Кнопка «Войти»
+            document.getElementById('loginBtn').onclick = async () => {
+                showAuthError('');
+                const username = document.getElementById('loginUser').value.trim();
+                const password = document.getElementById('loginPass').value;
+                const res = await fetch('/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, password })
+                });
+                if (res.ok) {
+                    const d = await res.json();
+                    authState.authenticated = true;
+                    authState.username = d.username;
+                    await checkAuth();
+                } else {
+                    const d = await res.json().catch(() => ({}));
+                    showAuthError(d.error || 'Не удалось войти');
+                }
+            };
+            // Переключатель на форму регистрации
+            document.getElementById('toRegister').onclick = () => renderRegisterForm(bar);
+        }
+
+        /**
+         * Рисует форму РЕГИСТРАЦИИ в панели авторизации и навешивает обработчики.
+         * @param {HTMLElement} bar — контейнер #authBar
+         */
+        function renderRegisterForm(bar) {
+            bar.innerHTML = `
+                <div class="auth-row">
+                    <input type="text" id="regUser" placeholder="Логин (от 3 символов)" autocomplete="username">
+                    <input type="password" id="regPass" placeholder="Пароль (от 6 символов)" autocomplete="new-password">
+                    <button id="regBtn">Регистрация</button>
+                    <button class="auth-toggle" id="toLogin">Уже есть аккаунт?</button>
+                </div>
+                <div class="auth-error" id="authError"></div>
+            `;
+            // Кнопка «Регистрация»
+            document.getElementById('regBtn').onclick = async () => {
+                showAuthError('');
+                const username = document.getElementById('regUser').value.trim();
+                const password = document.getElementById('regPass').value;
+                const res = await fetch('/register', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, password })
+                });
+                if (res.status === 201) {
+                    const d = await res.json();
+                    authState.authenticated = true;
+                    authState.username = d.username;
+                    await checkAuth();
+                } else {
+                    const d = await res.json().catch(() => ({}));
+                    showAuthError(d.error || 'Не удалось зарегистрироваться');
+                }
+            };
+            // Переключатель обратно на форму входа
+            document.getElementById('toLogin').onclick = () => renderLoginForm(bar);
+        }
+
+        /*
+          ============================================================
           ЗАГРУЗКА И ОТОБРАЖЕНИЕ ЗАМЕТОК
           ============================================================
         */
@@ -573,8 +809,8 @@
         /**
          * Загружает список заметок с сервера (GET /notes) и рендерит их
          * в контейнер #notesList. Также навешивает обработчики на кнопки
-         * «Удалить». Вызывается при загрузке страницы и после каждого
-         * добавления/удаления заметки.
+         * «Удалить» (только если пользователь авторизован). Вызывается
+         * при загрузке страницы и после каждого добавления/удаления заметки.
          */
         async function loadNotes() {
             // 1. Делаем запрос к серверу и получаем JSON со списком заметок
@@ -597,8 +833,10 @@
                     </div>
                     <!-- Текст заметки, окрашенный выбранным цветом и размером шрифта -->
                     <p style="color:${n.font_color}; font-size:${n.font_size}px">${n.content}</p>
-                    <!-- Кнопка удаления; data-id хранит id заметки для DELETE-запроса -->
-                    <button class="delete-btn" data-id="${n.id}">Удалить</button>
+                    <!-- Кнопка удаления видна только авторизованным (data-id — id заметки) -->
+                    ${authState.authenticated
+                        ? `<button class="delete-btn" data-id="${n.id}">Удалить</button>`
+                        : ''}
                 </div>
             `).join(''); // join('') склеивает все карточки в одну строку без разделителей
 
@@ -606,7 +844,13 @@
             document.querySelectorAll('.delete-btn').forEach(btn => {
                 btn.onclick = async () => {
                     const id = btn.dataset.id; // читаем id заметки из атрибута data-id
-                    await fetch(`/notes/${id}`, { method: 'DELETE' }); // DELETE-запрос на сервер
+                    const res = await fetch(`/notes/${id}`, { method: 'DELETE' }); // DELETE-запрос
+                    if (res.status === 401) {
+                        // Если сессия истекла — просим войти заново
+                        authState.authenticated = false;
+                        await checkAuth();
+                        return;
+                    }
                     loadNotes(); // обновляем список после удаления
                 };
             });
@@ -622,6 +866,12 @@
         document.getElementById('noteForm').onsubmit = async (e) => {
             e.preventDefault(); // отменяем стандартную отправку формы (перезагрузку страницы)
 
+            // Если по какой-то причине не авторизованы — не отправляем
+            if (!authState.authenticated) {
+                await checkAuth();
+                return;
+            }
+
             // 1. Читаем значения всех полей формы
             const title = document.getElementById('titleInput').value;       // заголовок
             const content = document.getElementById('contentInput').value;   // текст заметки
@@ -634,11 +884,18 @@
 
             // 3. Отправляем POST-запрос на сервер с JSON-телом:
             //    данные заметки + «паспорт» устройства посетителя
-            await fetch('/notes', {
+            const res = await fetch('/notes', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' }, // говорим серверу, что шлём JSON
                 body: JSON.stringify({ title, content, author, font_color, font_size, ...clientInfo })
             });
+
+            // сли сессия истекла (401) — просим войти заново
+            if (res.status === 401) {
+                authState.authenticated = false;
+                await checkAuth();
+                return;
+            }
 
             // 4. Очищаем поля формы после успешной отправки
             document.getElementById('titleInput').value = '';
@@ -649,8 +906,9 @@
             loadNotes();
         };
 
-        // При загрузке страницы сразу подгружаем существующие заметки
-        loadNotes();
+        // При загрузке страницы сначала проверяем статус авторизации,
+        // затем (внутри checkAuth) подгружаем существующие заметки.
+        checkAuth();
     </script>
     <!-- ===================== КОНЕЦ ЯЗЫКА JS ===================== -->
 </body>
