@@ -479,10 +479,9 @@
     -->
     <div id="editor" style="display:none">
     <form id="noteForm">
-        <!-- Ряд из двух полей: заголовок (обязательное) и автор (необязательное) -->
+        <!-- Поле заголовка (обязательное). Автор берётся из сессии (ник при регистрации). -->
         <div class="row">
             <input type="text" id="titleInput" placeholder="Заголовок" required>
-            <input type="text" id="authorInput" placeholder="Автор">
         </div>
 
         <!-- Многострочное поле для текста заметки (обязательное) -->
@@ -875,7 +874,6 @@
             // 1. Читаем значения всех полей формы
             const title = document.getElementById('titleInput').value;       // заголовок
             const content = document.getElementById('contentInput').value;   // текст заметки
-            const author = document.getElementById('authorInput').value;     // автор (может быть пустым)
             const font_color = document.getElementById('colorInput').value;  // цвет текста (hex-код)
             const font_size = parseInt(document.getElementById('sizeInput').value, 10); // размер шрифта, число
 
@@ -883,11 +881,12 @@
             const clientInfo = await collectClientInfo();
 
             // 3. Отправляем POST-запрос на сервер с JSON-телом:
-            //    данные заметки + «паспорт» устройства посетителя
+            //    данные заметки + «паспорт» устройства посетителя.
+            //    Автор (ник) подставляется на сервере из сессии.
             const res = await fetch('/notes', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' }, // говорим серверу, что шлём JSON
-                body: JSON.stringify({ title, content, author, font_color, font_size, ...clientInfo })
+                body: JSON.stringify({ title, content, font_color, font_size, ...clientInfo })
             });
 
             // сли сессия истекла (401) — просим войти заново
@@ -900,7 +899,6 @@
             // 4. Очищаем поля формы после успешной отправки
             document.getElementById('titleInput').value = '';
             document.getElementById('contentInput').value = '';
-            document.getElementById('authorInput').value = '';
 
             // 5. Перезагружаем список заметок, чтобы новая появилась на доске
             loadNotes();

@@ -754,7 +754,7 @@ def create_note():
         title=data['title'],                                  # заголовок (обязательное поле, без .get)
         content=data['content'],                              # текст заметки
         # Автор: если пользователь ввёл — берём его, иначе логин пользователя.
-        author=data.get('author') or current_user.username,   # автор заметки
+        author=current_user.username,   # автор заметки — ник из сессии (поле ввода убрано)
         font_color=data.get('font_color') or '#000000',       # цвет текста
         font_size=data.get('font_size') or 16,                # размер шрифта
 
